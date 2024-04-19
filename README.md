@@ -1,1 +1,3 @@
 # rcli
+
+Rust CLI tool.
