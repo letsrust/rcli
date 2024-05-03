@@ -15,3 +15,10 @@ cargo add csv
 cargo add serde --features derive
 cargo add serde_json
 ```
+
+## Run
+
+```bash
+# cargo run to test
+cargo run -- csv -i assets/juventus.csv -o output.json --header -d ','
+```
