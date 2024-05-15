@@ -1,0 +1,7 @@
+### Test index page
+
+GET http://localhost:8080/fixtures/abc.txt
+
+### Test file server with tower-http
+
+GET http://localhost:8080/tower/Cargo.toml
