@@ -35,3 +35,11 @@ cargo run -- text encrypt --key fixtures/chacha20.txt --input README.md
 # decrypt
 cargo run -- text decrypt --key fixtures/chacha20.txt --input fixtures/textencrypt.txt
 ```
+
+### Jwt
+
+```
+# Key is hello
+cargo run -- jwt sign --sub abc --exp 1d --aud aaa
+cargo run -- jwt verify -t ...
+```

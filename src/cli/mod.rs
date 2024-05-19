@@ -2,9 +2,10 @@ mod base64;
 mod csv;
 mod genpass;
 mod http;
+mod jwt;
 mod text;
 
-pub use self::{base64::*, csv::*, genpass::*, http::*, text::*};
+pub use self::{base64::*, csv::*, genpass::*, http::*, jwt::*, text::*};
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
@@ -30,6 +31,8 @@ pub enum SubCommand {
     Text(TextSubCommand),
     #[command(subcommand, about = "HTTP server")]
     Http(HttpSubCommand),
+    #[command(subcommand, about = "JWT encode/decode")]
+    Jwt(JwtSubCommand),
 }
 
 fn verify_file(filename: &str) -> anyhow::Result<String, &'static str> {
