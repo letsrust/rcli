@@ -22,3 +22,16 @@ cargo add serde_json
 # cargo run to test
 cargo run -- csv -i assets/juventus.csv -o output.json --header -d ','
 ```
+
+### Text encrypt / decrypt
+
+```shell
+# generate key
+cargo run -- text generate --format chacha20 --output-path fixtures
+
+# encrypt
+cargo run -- text encrypt --key fixtures/chacha20.txt --input README.md
+
+# decrypt
+cargo run -- text decrypt --key fixtures/chacha20.txt --input fixtures/textencrypt.txt
+```

@@ -1,5 +1,9 @@
 use crate::{process_genpass, TextSignFormat};
 use anyhow::Result;
+use chacha20poly1305::aead::generic_array::typenum::Unsigned;
+use chacha20poly1305::aead::generic_array::GenericArray;
+use chacha20poly1305::aead::{Aead, AeadCore, KeyInit};
+use chacha20poly1305::ChaCha20Poly1305;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
 use std::collections::HashMap;
@@ -117,6 +121,62 @@ impl Ed25519Verifier {
     }
 }
 
+pub struct ChaCha20 {
+    key: Vec<u8>,
+}
+
+impl ChaCha20 {
+    pub fn try_new(key: impl AsRef<[u8]>) -> Result<Self> {
+        let key = key.as_ref();
+        Ok(Self::new(key))
+    }
+
+    pub fn new(key: &[u8]) -> Self {
+        Self { key: key.to_vec() }
+    }
+
+    fn generate() -> Result<HashMap<&'static str, Vec<u8>>> {
+        let key = ChaCha20Poly1305::generate_key(&mut OsRng).to_vec();
+        let mut map = HashMap::new();
+        map.insert("chacha20.txt", key);
+        Ok(map)
+    }
+
+    fn encrypt(&self, reader: &mut dyn Read) -> Result<Vec<u8>> {
+        let key = GenericArray::from_slice(&self.key);
+        let cipher = ChaCha20Poly1305::new(key);
+        let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
+
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf)?;
+
+        let mut obsf = cipher.encrypt(&nonce, buf.as_slice()).unwrap();
+        obsf.splice(..0, nonce.iter().copied());
+        Ok(obsf)
+    }
+
+    fn decrypt(&self, reader: &mut dyn Read) -> Result<Vec<u8>> {
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf)?;
+
+        let s = String::from_utf8_lossy(&buf);
+        let s = s.trim();
+        let buf = s.as_bytes().to_vec();
+
+        let bytes = hex::decode(buf).unwrap();
+        println!("{:?}", bytes);
+
+        type NonceSize = <ChaCha20Poly1305 as AeadCore>::NonceSize;
+        let key = GenericArray::from_slice(&self.key);
+        let cipher = ChaCha20Poly1305::new(key);
+        let (nonce, ciphertext) = bytes.split_at(NonceSize::to_usize());
+        let nonce = GenericArray::from_slice(nonce);
+
+        let plaintext = cipher.decrypt(nonce, ciphertext).unwrap();
+        Ok(plaintext)
+    }
+}
+
 pub fn process_text_sign(
     reader: &mut dyn Read,
     key: &[u8],
@@ -125,6 +185,7 @@ pub fn process_text_sign(
     let signer: Box<dyn TextSigner> = match format {
         TextSignFormat::Blake3 => Box::new(Blake3::try_new(key)?),
         TextSignFormat::Ed25519 => Box::new(Ed25519Signer::try_new(key)?),
+        _ => Err(anyhow::anyhow!("Unsupported format to sign"))?,
     };
 
     signer.sign(reader)
@@ -139,6 +200,7 @@ pub fn process_text_verify(
     let verifier: Box<dyn TextVerifier> = match format {
         TextSignFormat::Blake3 => Box::new(Blake3::try_new(key)?),
         TextSignFormat::Ed25519 => Box::new(Ed25519Verifier::try_new(key)?),
+        _ => Err(anyhow::anyhow!("Unsupported format to verify"))?,
     };
 
     verifier.verify(reader, signature)
@@ -148,5 +210,16 @@ pub fn process_text_keygen(format: TextSignFormat) -> Result<HashMap<&'static st
     match format {
         TextSignFormat::Blake3 => Blake3::generate(),
         TextSignFormat::Ed25519 => Ed25519Signer::generate(),
+        TextSignFormat::ChaCha20 => ChaCha20::generate(),
     }
+}
+
+pub fn process_text_encrypt(reader: &mut dyn Read, key: &[u8]) -> Result<Vec<u8>> {
+    let cc = ChaCha20::try_new(key)?;
+    cc.encrypt(reader)
+}
+
+pub fn process_text_decrypt(reader: &mut dyn Read, key: &[u8]) -> Result<Vec<u8>> {
+    let cc = ChaCha20::try_new(key)?;
+    cc.decrypt(reader)
 }

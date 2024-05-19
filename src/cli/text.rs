@@ -9,8 +9,8 @@ use std::str::FromStr;
 use tokio::fs;
 
 use crate::{
-    get_content, get_reader, process_text_keygen, process_text_sign, process_text_verify,
-    CmdExecutor,
+    get_content, get_reader, process_text_decrypt, process_text_encrypt, process_text_keygen,
+    process_text_sign, process_text_verify, CmdExecutor,
 };
 
 #[derive(Debug, Parser)]
@@ -28,6 +28,11 @@ pub enum TextSubCommand {
         about = "Generate a random blake3 key or ed25519 keypair"
     )]
     Generate(KeyGenerateOpts),
+
+    #[command(name = "encrypt", about = "Encrypt a text with a key")]
+    Encrypt(TextEncryptOpts),
+    #[command(name = "decrypt", about = "Decrypt a text with a key")]
+    Decrypt(TextDecryptOpts),
 }
 
 #[derive(Debug, Parser)]
@@ -60,10 +65,27 @@ pub struct KeyGenerateOpts {
     pub output_path: PathBuf,
 }
 
+#[derive(Debug, Parser)]
+pub struct TextEncryptOpts {
+    #[arg(short, long, value_parser = verify_file, default_value = "-")]
+    pub input: String,
+    #[arg(short, long, value_parser = verify_file)]
+    pub key: String,
+}
+
+#[derive(Debug, Parser)]
+pub struct TextDecryptOpts {
+    #[arg(short, long, value_parser = verify_file, default_value = "-")]
+    pub input: String,
+    #[arg(short, long, value_parser = verify_file)]
+    pub key: String,
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum TextSignFormat {
     Blake3,
     Ed25519,
+    ChaCha20,
 }
 
 fn parse_text_sign_format(format: &str) -> Result<TextSignFormat, anyhow::Error> {
@@ -77,6 +99,7 @@ impl FromStr for TextSignFormat {
         match s {
             "blake3" => Ok(TextSignFormat::Blake3),
             "ed25519" => Ok(TextSignFormat::Ed25519),
+            "chacha20" => Ok(TextSignFormat::ChaCha20),
             _ => Err(anyhow::anyhow!("Invalid format")),
         }
     }
@@ -87,6 +110,7 @@ impl From<TextSignFormat> for &'static str {
         match f {
             TextSignFormat::Blake3 => "blake3",
             TextSignFormat::Ed25519 => "ed25519",
+            TextSignFormat::ChaCha20 => "chacha20",
         }
     }
 }
@@ -128,8 +152,33 @@ impl CmdExecutor for KeyGenerateOpts {
     async fn execute(self) -> Result<()> {
         let key = process_text_keygen(self.format)?;
         for (k, v) in key {
+            println!("{}: {}", k, hex::encode(&v));
             fs::write(self.output_path.join(k), v).await?;
         }
+        Ok(())
+    }
+}
+
+impl CmdExecutor for TextEncryptOpts {
+    async fn execute(self) -> Result<()> {
+        let mut reader = get_reader(&self.input)?;
+        let key = get_content(&self.key)?;
+        let cipher_text = process_text_encrypt(&mut reader, &key)?;
+        println!("{:?}", cipher_text);
+
+        let cipher_hex = hex::encode(cipher_text);
+        println!("{}", cipher_hex);
+        println!("{}", cipher_hex.len());
+        Ok(())
+    }
+}
+
+impl CmdExecutor for TextDecryptOpts {
+    async fn execute(self) -> Result<()> {
+        let mut reader = get_reader(&self.input)?;
+        let key = get_content(&self.key)?;
+        let plain_text = process_text_decrypt(&mut reader, &key)?;
+        println!("{}", String::from_utf8_lossy(&plain_text));
         Ok(())
     }
 }
